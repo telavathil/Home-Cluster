@@ -6,5 +6,5 @@ output "home_assistant_url" {
   value       = "http://localhost:8123"
 }
 output "ssh_tunnel" {
-  value = "ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:8123:10.30.0.30:8123 pve"
+  value = "ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:8123:10.30.0.30:80 pve"
 }

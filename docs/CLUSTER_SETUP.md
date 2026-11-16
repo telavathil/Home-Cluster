@@ -187,7 +187,7 @@ From the Mac:
 
 ```sh
 scripts/status.sh
-ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:8123:10.30.0.30:8123 pve
+ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:8123:10.30.0.30:80 pve
 ```
 
-Visit [http://localhost:8123](http://localhost:8123), complete onboarding and create a Home Assistant backup. Initial HA container downloads require the existing Services NAT/DNS path and can take time. If egress or the tunnel is blocked, report the exact failure and review current rules; do not replace host Wi-Fi, bridge, NAT or firewall configuration. Confirm VM 102 is still reachable through its existing access method.
+The tunnel targets guest port 80: this Home Assistant build serves its UI there, and port 8123 only redirects to port 80 on the requested host (through a tunnel, the Mac's port 80). Visit [http://localhost:8123](http://localhost:8123), complete onboarding and create a Home Assistant backup. Initial HA container downloads require the existing Services NAT/DNS path and can take time. If egress or the tunnel is blocked, report the exact failure and review current rules; do not replace host Wi-Fi, bridge, NAT or firewall configuration. Confirm VM 102 is still reachable through its existing access method.

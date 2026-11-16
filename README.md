@@ -29,10 +29,19 @@ scripts/plan.sh       # prompts again, for the run that covered the staged image
 Access after a separately reviewed deployment:
 
 ```sh
-ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:8123:10.30.0.30:8123 pve
+ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:8123:10.30.0.30:80 pve
 ```
 
-Open [http://localhost:8123](http://localhost:8123). The basic equivalent is `ssh -L 8123:10.30.0.30:8123 pve`; binding explicitly to loopback limits exposure. The Mac does not need a route to the Services subnet.
+Open [http://localhost:8123](http://localhost:8123). The basic equivalent is `ssh -L 8123:10.30.0.30:80 pve`; binding explicitly to loopback limits exposure. The Mac does not need a route to the Services subnet.
+
+The deployed Home Assistant serves its UI on guest port **80**. Port 8123 answers only with a `307` to port 80 on the requested host, which through a tunnel becomes `http://localhost/` on the Mac and fails, so forward to port 80.
+
+For an always-on tunnel, this Mac uses a `home-assistant-ui` host in `~/.ssh/config` (`HostName 192.168.1.40`, `User tobin`, `LocalForward 127.0.0.1:8123 10.30.0.30:80`, `ExitOnForwardFailure yes`, `ServerAliveInterval 30`) and the LaunchAgent `~/Library/LaunchAgents/com.homecluster.home-assistant-tunnel.plist`, which runs `/usr/bin/ssh -N -T -o BatchMode=yes -o ConnectTimeout=10 home-assistant-ui` with `RunAtLoad`, `KeepAlive` and a 30 s throttle, logging to `~/Library/Logs/home-assistant-tunnel.log`. Both live outside the repository, mirroring the ProxUI tunnel. HAOS has no SSH login, so the tunnel ends at pve.
+
+```sh
+launchctl kickstart -k gui/$(id -u)/com.homecluster.home-assistant-tunnel   # restart
+launchctl bootout gui/$(id -u)/com.homecluster.home-assistant-tunnel        # stop
+```
 
 ## Validation record (2026-11-16)
 
@@ -41,7 +50,7 @@ Open [http://localhost:8123](http://localhost:8123). The basic equivalent is `ss
 - `tofu plan -input=false` was attempted and stopped at missing `image_file_id`. `scripts/plan.sh` also correctly stopped at missing dedicated API credentials. A further non-applying plan with a synthetic SHA256 image ID reached provider configuration and failed with the explicit missing-credentials error.
 - Image staged by the administrator at `local:import/haos-18.4-static-d4a0…15e5.qcow2`; image-bound `pve-preflight.sh` passed (checksum, `qemu-img check`, inventory, ARP). `scripts/plan.sh` then produced `artifacts/home-assistant.tfplan`: **1 to add, 0 to change, 0 to destroy**, VM 130 only, no reference to VM 102. Re-planned with Proxmox `protection = true`; same result.
 - First apply failed before creating anything: the provider ignores `SSL_CERT_FILE` and uses the macOS keychain (`x509: “pve” certificate is not trusted`). After trusting the CA in the login keychain for SSL to `192.168.1.40` only, a fresh preflight and re-plan (same 1 create) were applied: **VM 130 created and running**. Proxmox config matches (OVMF, q35, 2 cores, 4096 MiB, `protection=1`, `onboot=1`, MAC `BC:24:11:30:00:30` on `vmbr1`, 32 GiB `scsi0` and EFI disk on `local`). State snapshot taken with `backup-state.sh`.
-- From pve, `10.30.0.30` answered ARP from `bc:24:11:30:00:30` ~40 s after boot (boot-partition static profile imported; no DHCP) and `http://10.30.0.30:8123/` returned 302. Console `ha network info`, onboarding and a first HA backup are still to do.
+- From pve, `10.30.0.30` answered ARP from `bc:24:11:30:00:30` ~40 s after boot (boot-partition static profile imported; no DHCP) and `http://10.30.0.30:8123/` returned 302 while the landing page ran. Once Core started, port 8123 returned `307` to port 80, and `http://10.30.0.30/` served onboarding; the tunnel was switched to port 80 and `http://localhost:8123/onboarding.html` returned 200. Console `ha network info`, onboarding and a first HA backup are still to do.
 - `prepare-image.sh` completed after installing qemu, mtools, xz and jq: prepared SHA256 `d4a0268217f710c3287585d039820145bcc5d6d11f010df057694ecd2e7515e5`, verified against `prepared.sha256`. It has not been staged; boot/static-IP behavior is untested.
 - Root web-shell discovery on pve: `local` is `dir` with `images` and `import` (path `/var/lib/vz`, ~857 GB free); VMID 130 and MAC `BC:24:11:30:00:30` unused; `vmbr1` is `10.30.0.1/24`; `iputils-arping` installed by the administrator, and `arping -D` for `10.30.0.30` got 0 replies. Stopped VM 100 is on `vmbr1` with no Proxmox-side IP, so any in-disk static address is unverified. No `opentofu@pve` user, HAOS roles or token existed.
 - Root SSH from the Mac is refused, and remains unconfigured by design. Privileged checks moved to `scripts/pve-preflight.sh` (web shell) with a pasted, image-bound, one-hour `PREFLIGHT-OK` attestation. `confirm_preflight` accept/reject cases were exercised locally. The script (SHA256 `f8da8322…40d5`) ran as root on pve with no image argument and passed.
