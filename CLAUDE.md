@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Documentation and infrastructure-as-code for the single-node Proxmox home cluster (`pve`, its networks `vmbr1`/`vmbr2` and guests 100, 101, 102, 130, 9000). `README.md` is the cluster overview: host, networks, guest inventory and Mac access. Only one workload is under OpenTofu: local-state config in `infra/home-assistant/` defining exactly **one Home Assistant OS 18.4 VM (VMID 130)** on Proxmox node `pve` (API `https://192.168.1.40:8006`), static IP `10.30.0.30/24` on existing bridge `vmbr1`. It is deliberately review-gated: VM 130 was applied once, on 2026-11-16, from a reviewed saved plan by running `tofu apply` directly; `scripts/apply.sh` still always fails by design. Do not make it apply, and do not run host-mutating commands (image upload, `pveum`, `pvesm set`, `apt-get`, `tofu apply`, `tofu import`, VM power/config changes) without explicit authorization in the current session.
 
-Out of scope and never to be touched or imported: VM 102 (ProxUI, `10.30.0.20`), `proxui@pve`, bridges, Wi-Fi, NAT, firewall, storage config, identities.
+Not managed by OpenTofu and never to be imported: VM 102 (ProxUI, `10.30.0.20`), `proxui@pve`, bridges, Wi-Fi, NAT, firewall, storage config, identities. The host firewall/NAT (`/etc/nftables/homelab.nft`, loaded by `homelab-nftables.service`) is documented in the README and changed only manually with explicit approval. The service deletes both `homelab` tables before loading, so always run `nft -c -f` before restarting it. It carries one port forward: Wi-Fi `:8123` → `10.30.0.30:80` for LAN access to Home Assistant.
 
 ## Commands
 

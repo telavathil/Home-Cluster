@@ -45,6 +45,12 @@ ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:8123:10.30.0.30:80 pve
 
 Open [http://localhost:8123](http://localhost:8123). Binding explicitly to loopback limits exposure.
 
+### From the LAN and the phone app
+
+The host forwards Wi-Fi port 8123 to `10.30.0.30:80` (see [Host firewall and NAT](../README.md#host-firewall-and-nat)), so any device on the home Wi-Fi can open `http://192.168.1.40:8123`. The companion app cannot auto-discover the server, because mDNS does not cross from the LAN into `vmbr1`: choose **Enter address manually** and use `http://192.168.1.40:8123`. Also set **Settings → System → Network → Local network** to `http://192.168.1.40:8123`, otherwise Home Assistant may hand the app its own `10.30.0.30` address, which LAN devices cannot reach. This works on the home Wi-Fi only; remote access needs a separate, reviewed option such as Home Assistant Cloud or Tailscale. Keep `192.168.1.40` reserved for `pve` in the router's DHCP.
+
+### Mac tunnel
+
 For an always-on tunnel, the Mac uses a `home-assistant-ui` host in `~/.ssh/config` (`HostName 192.168.1.40`, `User tobin`, `LocalForward 127.0.0.1:8123 10.30.0.30:80`, `ExitOnForwardFailure yes`, `ServerAliveInterval 30`) and the LaunchAgent `~/Library/LaunchAgents/com.homecluster.home-assistant-tunnel.plist`. It runs `/usr/bin/ssh -N -T -o BatchMode=yes -o ConnectTimeout=10 home-assistant-ui` with `RunAtLoad`, `KeepAlive` and a 30 s throttle, logging to `~/Library/Logs/home-assistant-tunnel.log`. Both live outside the repository and mirror the ProxUI tunnel.
 
 ```sh
@@ -70,5 +76,7 @@ In order of events:
 - First apply failed before creating anything: the provider ignores `SSL_CERT_FILE` and uses the macOS keychain (`x509: “pve” certificate is not trusted`). After trusting the CA in the login keychain for SSL to `192.168.1.40` only, a fresh preflight and re-plan (same 1 create) were applied: **VM 130 created and running**. Proxmox config matches (OVMF, q35, 2 cores, 4096 MiB, `protection=1`, `onboot=1`, MAC `BC:24:11:30:00:30` on `vmbr1`, 32 GiB `scsi0` and EFI disk on `local`). State snapshot taken with `backup-state.sh`.
 - From pve, `10.30.0.30` answered ARP from `bc:24:11:30:00:30` ~40 s after boot (boot-partition static profile imported; no DHCP) and `http://10.30.0.30:8123/` returned 302 while the landing page ran. Once Core started, port 8123 returned `307` to port 80, and `http://10.30.0.30/` served onboarding; the tunnel was switched to port 80 and `http://localhost:8123/onboarding.html` returned 200.
 - The stored `ssh_tunnel` output in local state still shows the pre-fix port 8123 value; it updates on the next reviewed apply, which should show no infrastructure change.
+
+- The companion app could not auto-discover the server from the home Wi-Fi (mDNS does not cross subnets, and the LAN has no route to `vmbr1`). With approval, the administrator added a prerouting DNAT, Wi-Fi port 8123 → `10.30.0.30:80`, to `/etc/nftables/homelab.nft` (backup `homelab.nft.bak-20261116`), passed `nft -c -f`, and restarted `homelab-nftables` (active). From the Mac on the LAN, `http://192.168.1.40:8123/` returned 200 and `/api/` 401; the Mac tunnel (200) and ProxUI tunnel (401 login) still worked.
 
 Still to do: console `ha network info`, onboarding and a first HA backup copied off the VM. Network/Unix-socket restrictions in the Codex sandbox required approval for provider installation and the complete validation check.
