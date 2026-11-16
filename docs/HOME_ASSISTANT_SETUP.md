@@ -1,4 +1,4 @@
-# Cluster setup
+# Home Assistant setup
 
 ## Scope and versions
 

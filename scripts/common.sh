@@ -14,7 +14,7 @@ unset TF_CLI_ARGS TF_CLI_ARGS_apply TF_CLI_ARGS_plan
 fail() { echo "ERROR: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null || fail "Missing tool: $1"; }
 credentials() {
-  [[ ${PROXMOX_VE_API_TOKEN:-} == opentofu@pve\!home-assistant=* ]] || fail 'Set the dedicated PROXMOX_VE_API_TOKEN in .env (see docs/CLUSTER_SETUP.md).'
+  [[ ${PROXMOX_VE_API_TOKEN:-} == opentofu@pve\!home-assistant=* ]] || fail 'Set the dedicated PROXMOX_VE_API_TOKEN in .env (see docs/HOME_ASSISTANT_SETUP.md).'
   [[ $PROXMOX_VE_API_TOKEN != *REPLACE* ]] || fail 'Replace the example API token.'
 }
 # Privileged host checks run in the pve web shell (no administrator SSH); the operator
