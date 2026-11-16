@@ -79,3 +79,4 @@ The SSH hosts are in `~/.ssh/config` and the agents in `~/Library/LaunchAgents/`
 - [Home Assistant](docs/HOME_ASSISTANT.md): workload summary, workflow, access and validation record.
 - [Home Assistant setup](docs/HOME_ASSISTANT_SETUP.md): the administrator procedure (discovery, API identity, TLS trust, image staging, plan review, verification).
 - [Recovery](docs/RECOVERY.md): OpenTofu state backup/restore and Home Assistant recovery.
+- [Documentation backlog](docs/TODO.md): hand-built parts of the cluster (users, roles, ProxUI, host setup) still to be written down.
