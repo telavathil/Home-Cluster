@@ -13,6 +13,8 @@ resource "proxmox_virtual_environment_vm" "home_assistant" {
   started         = true
   on_boot         = true
   stop_on_destroy = false
+  # Proxmox-side deletion guard, complementing prevent_destroy below.
+  protection = true
 
   cpu {
     cores = 2

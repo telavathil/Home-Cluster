@@ -44,7 +44,24 @@ arping -D -I vmbr1 -c 3 -w 5 10.30.0.30
 ip neigh show dev vmbr1
 ```
 
-Use **iputils arping**, where `-D` returns zero if no duplicate replies arrived. If absent, stop; review `apt-get install iputils-arping` separately. No ping reply does not prove an address is unused. Check your address inventory and powered-off VM/container configuration too; guests can hold static addresses inside their disks. Reserve `10.30.0.30` for HAOS in your inventory only after this review. Stop on a duplicate or inconclusive result. Repeat immediately before a reviewed apply. `discover.sh` fails if VMID 130 exists, so it is intentionally an **initial creation** preflight; later maintenance requires inspection of the existing VM and state instead.
+Use **iputils arping**, where `-D` returns zero if no duplicate replies arrived. If absent, stop; review `apt-get install iputils-arping` separately. No ping reply does not prove an address is unused. Check your address inventory and powered-off VM/container configuration too; guests can hold static addresses inside their disks. Reserve `10.30.0.30` for HAOS in your inventory only after this review. Stop on a duplicate or inconclusive result. Repeat immediately before a reviewed apply.
+
+### Privileged preflight without administrator SSH
+
+The Mac has no root SSH to pve, and root SSH must not be enabled for this project. The privileged checks therefore live in `scripts/pve-preflight.sh`, which an administrator runs as root in the Proxmox web UI shell (**Datacenter → pve → Shell**). It is read-only: full VM/container inventory and VMID 130 absence across all node directories, the proposed MAC in guest configs, `arping -D` for `10.30.0.30` and, when given an image ID, the staged file's SHA256 and `qemu-img check`. Copy it over with the unprivileged SSH user, then let root review and take its own copy so a user-writable file is not executed as root:
+
+```sh
+# Mac
+shasum -a 256 scripts/pve-preflight.sh
+scp scripts/pve-preflight.sh pve:pve-preflight.sh
+# Root shell on pve: compare the SHA256 and read the script before running it.
+install -m 700 -o root -g root /home/tobin/pve-preflight.sh /root/pve-preflight.sh
+sha256sum /root/pve-preflight.sh
+bash /root/pve-preflight.sh                  # initial discovery
+bash /root/pve-preflight.sh 'local:import/haos-18.4-static-SHA256.qcow2'   # after staging
+```
+
+It ends with a line such as `PREFLIGHT-OK vmid=130 ip=10.30.0.30 image=none time=1763300000`. `discover.sh` and `plan.sh` prompt for that line and reject it if it covers a different image or is more than an hour old. Pasting it is an operator attestation, not cryptographic proof: read the preceding output. The preflight fails if VMID 130 exists, so it is intentionally an **initial creation** preflight; later maintenance requires inspection of the existing VM and state instead.
 
 ## Dedicated API identity (review, then administrator executes)
 
@@ -80,11 +97,11 @@ pveum user permissions opentofu@pve
 pveum user token permissions opentofu@pve home-assistant
 ```
 
-Verify the token cannot configure `/vms/102` and cannot change host networking. Discovery uses a separate administrator SSH session because an ACL-filtered guest list cannot establish that a VMID is unused.
+Verify the token cannot configure `/vms/102` and cannot change host networking. Privileged discovery runs as root in the web UI shell (`pve-preflight.sh`) because an ACL-filtered guest list cannot establish that a VMID is unused.
 
 ## API TLS trust
 
-Obtain the public `/etc/pve/pve-root-ca.pem` certificate through an existing trusted administrator session. Compare its fingerprint on pve before trusting it on the Mac. Store the public certificate in an ignored local file and set its absolute path as `SSL_CERT_FILE` in `.env`. Check that the endpoint certificate includes the IP address in its SAN. A CA trust file does not fix a name mismatch. For a separately reviewed local PoC, set `TF_VAR_insecure=true` in `.env` to make both provider and discovery skip verification. This is explicit, defaults off, and does not change the host certificate.
+Obtain the public `/etc/pve/pve-root-ca.pem` certificate through an existing trusted administrator session. Compare its fingerprint on pve before trusting it on the Mac. Store the public certificate in an ignored local file and set its absolute path as `SSL_CERT_FILE` in `.env`. Check that the endpoint certificate includes the IP address in its SAN. A CA trust file does not fix a name mismatch. `SSL_CERT_FILE` replaces the system trust store, so `check.sh` unsets it for `tofu init`, the only step that contacts the provider registry. For a separately reviewed local PoC, set `TF_VAR_insecure=true` in `.env` to make both provider and discovery skip verification. This is explicit, defaults off, and does not change the host certificate.
 
 ## Prepare the official image on the Mac
 
@@ -112,8 +129,8 @@ cat artifacts/image-manifest.txt
 # Administrator on pve: resolve the destination, and create its import directory
 # ONLY if required and approved. Do not overwrite an existing image.
 pvesm path 'local:import/haos-18.4-static-SHA256.qcow2'
-# Mac: upload to an administrator-approved temporary filename on pve.
-scp artifacts/haos-18.4-static-SHA256.qcow2 ADMIN@192.168.1.40:/tmp/haos-upload.qcow2
+# Mac: upload with the unprivileged SSH user to a temporary filename on pve.
+scp artifacts/haos-18.4-static-SHA256.qcow2 pve:/tmp/haos-upload.qcow2
 # Administrator on pve: use the reviewed exact path from pvesm path above.
 sha256sum /tmp/haos-upload.qcow2
 qemu-img check -f qcow2 /tmp/haos-upload.qcow2
@@ -125,7 +142,7 @@ sha256sum "$DEST"
 pvesm list local --content import
 ```
 
-Replace `SHA256` and `ADMIN` with the actual values, including in `DEST`. If the import directory doesn't exist, review creating exactly that directory before copying. Verify both checksums match. Keep the prepared source available for rebuilds. OpenTofu imports it into a new disk owned by VM 130; it does not attach the source as the writable guest disk. The 32 GiB resize allows HAOS to expand its data partition during boot.
+Replace `SHA256` with the actual value, including in `DEST`. The copy into `DEST` runs as root in the web UI shell; the checksum comparison guards against changes while the upload sat in `/tmp`. If the import directory doesn't exist, review creating exactly that directory before copying. Verify both checksums match. Keep the prepared source available for rebuilds. OpenTofu imports it into a new disk owned by VM 130; it does not attach the source as the writable guest disk. The 32 GiB resize allows HAOS to expand its data partition during boot.
 
 ## Plan, review, and stop
 
@@ -140,7 +157,7 @@ scripts/discover.sh
 scripts/plan.sh
 ```
 
-Do not recopy examples over an existing local configuration. The plan script checks datastore capabilities, free space, bridge presence, full administrator VMID inventory and ARP duplicates. It also verifies staged source existence and checksum. Before approval, reconcile offline address allocations and confirm the source manifest, static profile and MAC match. Review `tofu show artifacts/home-assistant.tfplan` using `-chdir=infra/home-assistant`. The initial plan must contain exactly **one VM create**, ID 130, no updates/deletes/replacements, and no reference to VM 102. No upload, host network/firewall, user or storage resources should appear. A plan itself does not verify guest readiness or prove IP availability.
+Do not recopy examples over an existing local configuration. Through the API, the plan script checks datastore capabilities, free space, bridge presence and that the staged source exists. It then prompts for a fresh `PREFLIGHT-OK` line from `pve-preflight.sh` run with the same image ID, which covers full VMID inventory, ARP duplicates and the staged checksum. Before approval, reconcile offline address allocations and confirm the source manifest, static profile and MAC match. Review `tofu show artifacts/home-assistant.tfplan` using `-chdir=infra/home-assistant`. The initial plan must contain exactly **one VM create**, ID 130, no updates/deletes/replacements, and no reference to VM 102. No upload, host network/firewall, user or storage resources should appear. A plan itself does not verify guest readiness or prove IP availability.
 
 **Stop here for this task.** `scripts/apply.sh` always fails, and no apply has been run. After explicit review and authorization in a later session, rerun discovery immediately, regenerate/review the plan if anything changed, and an operator may execute:
 

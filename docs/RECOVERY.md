@@ -49,7 +49,7 @@ tofu -chdir=infra/home-assistant import proxmox_virtual_environment_vm.home_assi
 tofu -chdir=infra/home-assistant plan
 ```
 
-Reconcile import drift with the actual VM. A plan proposing disk replacement, EFI removal, deletion or VM replacement is a stop condition. Never import `pve/102` into this project. `prevent_destroy` blocks destructive plans while the resource remains in the configuration; removing the block/resource is not a recovery method. The initial `discover.sh` deliberately refuses an occupied VMID, so use direct reviewed plan commands for an existing, imported deployment.
+Reconcile import drift with the actual VM. A plan proposing disk replacement, EFI removal, deletion or VM replacement is a stop condition. Never import `pve/102` into this project. `prevent_destroy` blocks destructive plans while the resource remains in the configuration; removing the block/resource is not a recovery method. The VM also sets Proxmox `protection`, so Proxmox itself refuses to delete it or its disks; an intentional, reviewed removal requires an administrator to clear that flag first. The initial `discover.sh` deliberately refuses an occupied VMID, so use direct reviewed plan commands for an existing, imported deployment.
 
 ## VM or application recovery
 

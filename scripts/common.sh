@@ -17,6 +17,19 @@ credentials() {
   [[ ${PROXMOX_VE_API_TOKEN:-} == opentofu@pve\!home-assistant=* ]] || fail 'Set the dedicated PROXMOX_VE_API_TOKEN in .env (see docs/CLUSTER_SETUP.md).'
   [[ $PROXMOX_VE_API_TOKEN != *REPLACE* ]] || fail 'Replace the example API token.'
 }
+# Privileged host checks run in the pve web shell (no administrator SSH); the operator
+# pastes the result line. This is an attestation, not proof: read the preflight output.
+confirm_preflight() {
+  local image=$1 line seen stamp now
+  echo "As root in the pve web UI shell, run: bash /root/pve-preflight.sh${image:+ $image}" >&2
+  read -r -p 'Paste the PREFLIGHT-OK line: ' line || fail 'No preflight result entered.'
+  [[ $line =~ ^PREFLIGHT-OK\ vmid=130\ ip=10\.30\.0\.30\ image=([^ ]+)\ time=([0-9]+)$ ]] || fail 'Not a PREFLIGHT-OK line.'
+  seen=${BASH_REMATCH[1]}
+  stamp=${BASH_REMATCH[2]}
+  [[ $seen == "${image:-none}" ]] || fail "Preflight covered image '$seen', expected '${image:-none}'."
+  now=$(date -u +%s)
+  (( stamp <= now + 300 && now - stamp <= 3600 )) || fail 'Preflight result is not from the last hour; rerun it.'
+}
 api() {
   local tls=()
   [[ ${TF_VAR_insecure:-false} != true ]] || tls=(-k)
