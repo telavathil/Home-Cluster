@@ -101,7 +101,16 @@ Verify the token cannot configure `/vms/102` and cannot change host networking. 
 
 ## API TLS trust
 
-Obtain the public `/etc/pve/pve-root-ca.pem` certificate through an existing trusted administrator session. Compare its fingerprint on pve before trusting it on the Mac. Store the public certificate in an ignored local file and set its absolute path as `SSL_CERT_FILE` in `.env`. Check that the endpoint certificate includes the IP address in its SAN. A CA trust file does not fix a name mismatch. `SSL_CERT_FILE` replaces the system trust store, so `check.sh` unsets it for `tofu init`, the only step that contacts the provider registry. For a separately reviewed local PoC, set `TF_VAR_insecure=true` in `.env` to make both provider and discovery skip verification. This is explicit, defaults off, and does not change the host certificate.
+Obtain the public `/etc/pve/pve-root-ca.pem` certificate through an existing trusted administrator session. Compare its fingerprint on pve before trusting it on the Mac. Store the public certificate in an ignored local file and set its absolute path as `SSL_CERT_FILE` in `.env`. Check that the endpoint certificate includes the IP address in its SAN. A CA trust file does not fix a name mismatch. `SSL_CERT_FILE` replaces the system trust store, so `check.sh` unsets it for `tofu init`, the only step that contacts the provider registry. `SSL_CERT_FILE` covers `curl` (`discover.sh`, `status.sh`) only: the bpg/proxmox provider binary (Go on macOS) verifies through the macOS keychain and ignores it, failing apply with `x509: “pve” certificate is not trusted`. Trust the CA in the login keychain, restricted to SSL for this endpoint, then confirm against the live certificate:
+
+```sh
+security add-trusted-cert -r trustRoot -p ssl -s 192.168.1.40 -k ~/Library/Keychains/login.keychain-db pve-root-ca.pem
+openssl s_client -connect 192.168.1.40:8006 </dev/null 2>/dev/null | openssl x509 > /tmp/pve-leaf.pem
+security verify-cert -c /tmp/pve-leaf.pem -p ssl -s 192.168.1.40
+# Undo: security remove-trusted-cert pve-root-ca.pem
+```
+
+Do not add the CA as an unrestricted root: whoever holds root on pve could then intercept any TLS connection from the Mac. For a separately reviewed local PoC, set `TF_VAR_insecure=true` in `.env` to make both provider and discovery skip verification. This is explicit, defaults off, and does not change the host certificate.
 
 ## Prepare the official image on the Mac
 
