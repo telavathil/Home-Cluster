@@ -1,0 +1,3 @@
+# Copy to terraform.tfvars after prepare-image.sh and reviewed staging.
+image_file_id = "local:import/haos-18.4-static-REPLACE_WITH_PREPARED_SHA256.qcow2"
+disk_size_gb  = 32
